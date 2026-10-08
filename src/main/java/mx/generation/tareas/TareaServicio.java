@@ -22,7 +22,7 @@ public class TareaServicio {
 
     /** Marca la tarea como completada. Si el id no existe, lanza TareaNoEncontradaException. */
     public Tarea completar(int id) {
-        Tarea tarea = repositorio.buscar(id);
+        Tarea tarea = obtener(id);
         tarea.marcarCompletada();
         return tarea;
     }
@@ -71,55 +71,90 @@ public class TareaServicio {
      * Reporte en texto plano para el resumen diario.
      */
     public String generarReporte(LocalDate hoy) {
-        String r = "";
-        r = r + "=== REPORTE DE TAREAS ===\n";
+        StringBuilder sb = new StringBuilder();
+        sb.append("=== REPORTE DE TAREAS ===\n");
+
+        EstadisticasTareas stats = contarEstadisticas(hoy);
+
+        sb.append("Total: ").append(stats.total).append("\n");
+        sb.append("Completadas: ").append(stats.completadas).append("\n");
+        sb.append("Pendientes: ").append(stats.total - stats.completadas).append("\n");
+        sb.append("Vencidas: ").append(stats.vencidas).append("\n");
+        sb.append("Alta prioridad pendientes: ").append(stats.altasPendientes).append("\n");
+        sb.append("Estado: ").append(calificarAvance(stats.total, stats.completadas)).append("\n");
+        sb.append("--- Pendientes ---\n");
+        sb.append(listarPendientesTexto());
+
+        return sb.toString();
+    }
+
+    private EstadisticasTareas contarEstadisticas(LocalDate hoy) {
         int total = 0;
-        int hechas = 0;
+        int completadas = 0;
         int vencidas = 0;
-        int altas = 0;
+        int altasPendientes = 0;
+
         for (Tarea t : repositorio.todas()) {
-            total = total + 1;
+            total++;
             if (t.isCompletada()) {
-                hechas = hechas + 1;
+                completadas++;
             } else {
-                if (t.getFechaLimite() != null) {
-                    if (t.getFechaLimite().isBefore(hoy)) {
-                        vencidas = vencidas + 1;
-                    }
+                if (estaVencida(t, hoy)) {
+                    vencidas++;
                 }
                 if (t.getPrioridad() == Prioridad.ALTA) {
-                    altas = altas + 1;
+                    altasPendientes++;
                 }
             }
         }
-        r = r + "Total: " + total + "\n";
-        r = r + "Completadas: " + hechas + "\n";
-        r = r + "Pendientes: " + (total - hechas) + "\n";
-        r = r + "Vencidas: " + vencidas + "\n";
-        r = r + "Alta prioridad pendientes: " + altas + "\n";
-        if (total > 0) {
-            int porcentaje = hechas * 100 / total;
-            if (porcentaje >= 80) {
-                r = r + "Estado: EXCELENTE (" + porcentaje + "%)\n";
-            } else if (porcentaje >= 50) {
-                r = r + "Estado: BIEN (" + porcentaje + "%)\n";
-            } else {
-                r = r + "Estado: ATRASADO (" + porcentaje + "%)\n";
-            }
-        } else {
-            r = r + "Estado: SIN TAREAS\n";
+
+        return new EstadisticasTareas(total, completadas, vencidas, altasPendientes);
+    }
+
+    private boolean estaVencida(Tarea t, LocalDate hoy) {
+        return t.getFechaLimite() != null && t.getFechaLimite().isBefore(hoy);
+    }
+
+    private String calificarAvance(int total, int completadas) {
+        if (total == 0) {
+            return "SIN TAREAS";
         }
-        r = r + "--- Pendientes ---\n";
+        int porcentaje = completadas * 100 / total;
+        if (porcentaje >= 80) {
+            return "EXCELENTE (" + porcentaje + "%)";
+        }
+        if (porcentaje >= 50) {
+            return "BIEN (" + porcentaje + "%)";
+        }
+        return "ATRASADO (" + porcentaje + "%)";
+    }
+
+    private String listarPendientesTexto() {
+        StringBuilder sb = new StringBuilder();
         for (Tarea t : repositorio.todas()) {
             if (!t.isCompletada()) {
-                r = r + "* " + t.getTitulo();
+                sb.append("* ").append(t.getTitulo());
                 if (t.getFechaLimite() != null) {
-                    r = r + " (vence " + t.getFechaLimite() + ")";
+                    sb.append(" (vence ").append(t.getFechaLimite()).append(")");
                 }
-                r = r + "\n";
+                sb.append("\n");
             }
         }
-        return r;
+        return sb.toString();
+    }
+
+    private static class EstadisticasTareas {
+        final int total;
+        final int completadas;
+        final int vencidas;
+        final int altasPendientes;
+
+        EstadisticasTareas(int total, int completadas, int vencidas, int altasPendientes) {
+            this.total = total;
+            this.completadas = completadas;
+            this.vencidas = vencidas;
+            this.altasPendientes = altasPendientes;
+        }
     }
 
     private Tarea obtener(int id) {
